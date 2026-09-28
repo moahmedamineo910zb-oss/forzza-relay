@@ -1,0 +1,9 @@
+{
+  "name": "forzza-static-ip-relay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Static egress IP relay for the NexusGGR production API (Render free plan, no external dependencies)",
+  "main": "relay.js",
+  "scripts": { "start": "node relay.js" },
+  "engines": { "node": ">=18" }
+}

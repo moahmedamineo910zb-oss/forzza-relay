@@ -1,0 +1,19 @@
+# Render Blueprint — خدمة ريلايّنا على الخطة المجانية (بلا بطاقة بنكية)
+# الاستخدام: اربط هذا المستودع في Render → New → Blueprint، أو أنشئ Web Service يدويًا بنفس القيم.
+services:
+  - type: web
+    name: forzza-relay
+    runtime: node
+    plan: free                     # مجاني · بلا بطاقة
+    region: frankfurt              # أقرب منطقة لأوروبا/تونس (عناوينها منشورة في لوحة Render)
+    buildCommand: npm install
+    startCommand: node relay.js
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: TARGET_URL
+        value: https://api.nexusggr.eu
+      - key: BIND
+        value: 0.0.0.0
+      - key: RELAY_KEY
+        sync: false                # سيطالبك Render بإدخاله عند الإنشاء (لا يُخزَّن في الملف)

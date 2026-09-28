@@ -11,6 +11,11 @@
      GET  /healthz  → {ok, egressIp, target, uptimeSec}
      POST /          body {method, agent_code, agent_token, ...}   header x-relay-key
    أمان: هدف واحد ثابت · مفتاح إلزامي · لا تُسجَّل أجسام الطلبات (تحمل توكن المزوّد).
+
+   keep-warm: خدمة Render المجانية «تنام» بعد 15 دقيقة بلا حركة دخل، وعند الاستيقاظ
+   قد تحصل على عنوان خروج آخر من نفس نطاق المنطقة ⇒ ينكسر عنوان مسجَّل في اللوحة.
+   لذلك نُرسل نبضة إلى رابط الخدمة العام (RENDER_EXTERNAL_URL) كل 4 دقائق: حركة دخل
+   حقيقية تُبقي نفس المثيل مستيقظًا ونفس عنوان الخروج ثابتًا. يمكن تعطيلها بـSELF_PING=0.
    ========================================================================== */
 'use strict';
 const http = require('node:http');
@@ -95,3 +100,31 @@ http.createServer(async (req, res) => {
   console.log(`[relay] listening on ${BIND}:${PORT} -> ${TARGET_URL}`);
   egressIp().then((ip) => console.log(`[relay] egress IP: ${ip}`));
 });
+
+/* ---------------------------------------------------------------------------
+   keep-warm — نبضة ذاتية كل 4 دقائق إلى الرابط العام للخدمة.
+   Render يوفّر RENDER_EXTERNAL_URL تلقائيًا. عطّلها بـSELF_PING=0.
+   --------------------------------------------------------------------------- */
+const SELF_PING = String(process.env.SELF_PING || '1') === '1';
+const SELF_URL = String(process.env.RENDER_EXTERNAL_URL || process.env.SELF_PING_URL || '').replace(/\/+$/, '');
+const PING_MS = Number(process.env.SELF_PING_MS || 4 * 60 * 1000);   // 4 دقائق < 15 دقيقة (حدّ النوم)
+if (SELF_PING && SELF_URL) {
+  const ping = async () => {
+    try {
+      const r = await fetch(`${SELF_URL}/healthz`, { signal: AbortSignal.timeout(20000) });
+      const j = await r.json().catch(() => null);
+      if (j && j.egressIp) eg = { ip: j.egressIp, at: Date.now() };   // تحديث ذاكرة العنوان
+      console.log(`[keep-warm] ${SELF_URL}/healthz -> ${r.status} ${j && j.egressIp ? 'ip=' + j.egressIp : ''}`);
+    } catch (e) {
+      console.log(`[keep-warm] ping failed: ${String(e.message || e).slice(0, 80)}`);
+    }
+  };
+  setTimeout(ping, 30000);                     // أول نبضة بعد الإقلاع بـ30 ثانية
+  setInterval(ping, PING_MS);                  // ثم كل 4 دقائق
+  console.log(`[keep-warm] self-ping كل ${Math.round(PING_MS / 1000)}ث → ${SELF_URL}`);
+} else {
+  console.log('[keep-warm] معطّلة (SELF_PING=0 أو لا يوجد رابط عام)');
+}
+
+/* تقرير دوري لعنوان الخروج في السجلات (يساعد في مراقبة ثبات العنوان) */
+setInterval(() => { egressIp().then((ip) => console.log(`[relay] egress IP now: ${ip}`)); }, 30 * 60 * 1000);
